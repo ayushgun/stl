@@ -39,14 +39,12 @@ class vec {
         _capacity(std::exchange(other._capacity, 0)),
         _buffer(std::exchange(other._buffer, nullptr)) {}
 
-  template <typename... U>
-    requires(sizeof...(U) > 0 && (std::is_convertible_v<U, T> && ...))
-  vec(U&&... values)
-      : _size(sizeof...(U)),
-        _capacity(sizeof...(U)),
-        _buffer(stl::make_box<T[]>(sizeof...(U))) {
-    std::size_t index = 0;
-    ((_buffer[index++] = std::forward<U>(values)), ...);
+  vec(std::initializer_list<T> init)
+    requires std::copyable<T>
+      : _size(init.size()),
+        _capacity(init.size()),
+        _buffer(stl::make_box<T[]>(init.size())) {
+    std::copy(init.begin(), init.end(), _buffer.get());
   }
 
   auto assign(std::size_t count, const T& value)
@@ -230,6 +228,18 @@ class vec {
       _size = std::exchange(other._size, 0);
       _capacity = std::exchange(other._capacity, 0);
     }
+    return *this;
+  }
+
+  auto operator=(std::initializer_list<T> init) -> vec&
+    requires std::copyable<T>
+  {
+    if (init.size() > _capacity) {
+      _buffer = stl::make_box<T[]>(init.size());
+      _capacity = init.size();
+    }
+    _size = init.size();
+    std::copy(init.begin(), init.end(), _buffer.get());
     return *this;
   }
 
