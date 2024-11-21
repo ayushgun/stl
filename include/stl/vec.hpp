@@ -3,8 +3,11 @@
 #include <algorithm>
 #include <concepts>
 #include <cstddef>
-#include <format>
+#include <initializer_list>
+#include <iterator>
+#include <memory>
 #include <type_traits>
+#include <utility>
 
 #include "box.hpp"
 
@@ -13,132 +16,174 @@ namespace stl {
 template <typename T>
 class vec {
  public:
-  explicit vec() : _size(0), _capacity(0), _buffer(nullptr) {}
+  using value_type = T;
+  using size_type = std::size_t;
+  using difference_type = std::ptrdiff_t;
+  using reference = value_type&;
+  using const_reference = const value_type&;
+  using pointer = value_type*;
+  using const_pointer = const value_type*;
+  using iterator = pointer;
+  using const_iterator = const_pointer;
+  using reverse_iterator = std::reverse_iterator<iterator>;
+  using const_reverse_iterator = std::reverse_iterator<const_iterator>;
 
-  explicit vec(std::size_t size)
-    requires std::default_initializable<T>
-      : _size(size), _capacity(size), _buffer(stl::make_box<T[]>(size)) {}
+  vec() : _size(0), _capacity(0), _buffer(nullptr) {}
 
-  explicit vec(std::size_t size, const T& value)
-    requires std::copyable<T>
-      : _size(size), _capacity(size), _buffer(stl::make_box<T[]>(size)) {
-    std::fill(_buffer.get(), _buffer.get() + _size, value);
+  explicit vec(size_type count)
+      : _size(count), _capacity(count), _buffer(stl::make_box<T[]>(count)) {
+    std::uninitialized_default_construct_n(_buffer.get(), count);
   }
 
-  explicit vec(const vec& other)
-    requires std::copyable<T>
+  vec(size_type count, const T& value)
+      : _size(count), _capacity(count), _buffer(stl::make_box<T[]>(count)) {
+    std::uninitialized_fill_n(_buffer.get(), count, value);
+  }
+
+  vec(const vec& other)
       : _size(other._size),
         _capacity(other._size),
         _buffer(stl::make_box<T[]>(other._size)) {
-    std::copy(other._buffer.get(), other._buffer.get() + other._size,
-              _buffer.get());
+    std::uninitialized_copy_n(other._buffer.get(), other._size, _buffer.get());
   }
 
-  explicit vec(vec&& other) noexcept
+  vec(vec&& other) noexcept
       : _size(std::exchange(other._size, 0)),
         _capacity(std::exchange(other._capacity, 0)),
-        _buffer(std::exchange(other._buffer, nullptr)) {}
+        _buffer(std::move(other._buffer)) {}
 
   vec(std::initializer_list<T> init)
-    requires std::copyable<T>
       : _size(init.size()),
         _capacity(init.size()),
         _buffer(stl::make_box<T[]>(init.size())) {
-    std::copy(init.begin(), init.end(), _buffer.get());
+    std::uninitialized_copy(init.begin(), init.end(), _buffer.get());
   }
 
-  auto assign(std::size_t count, const T& value)
-    requires std::copyable<T>
-  {
+  ~vec() {
+    clear();
+  }
+
+  auto assign(size_type count, const T& value) -> void {
+    clear();
     if (count > _capacity) {
       _buffer = stl::make_box<T[]>(count);
       _capacity = count;
     }
-
+    std::uninitialized_fill_n(_buffer.get(), count, value);
     _size = count;
-    std::fill(_buffer.get(), _buffer.get() + _size, value);
   }
 
-  auto at(std::size_t index) -> T& {
-    if (index >= _size)
-      throw std::out_of_range(std::format(
-          "vec::at access out of bounds: index {} exceeds capacity {}", index,
-          _capacity));
-    return _buffer[index];
+  template <typename InputIt>
+  auto assign(InputIt first, InputIt last) -> void {
+    clear();
+    size_type count = std::distance(first, last);
+    if (count > _capacity) {
+      _buffer = stl::make_box<T[]>(count);
+      _capacity = count;
+    }
+    std::uninitialized_copy(first, last, _buffer.get());
+    _size = count;
   }
 
-  auto at(std::size_t index) const -> const T& {
-    if (index >= _size)
-      throw std::out_of_range(std::format(
-          "vec::at access out of bounds: index {} exceeds capacity {}", index,
-          _capacity));
-    return _buffer[index];
-  }
-
-  auto operator[](std::size_t pos) -> T& {
+  auto at(size_type pos) -> reference {
+    if (pos >= _size) {
+      throw std::out_of_range("vec::at: position out of range");
+    }
     return _buffer[pos];
   }
 
-  auto operator[](std::size_t pos) const -> const T& {
+  auto at(size_type pos) const -> const_reference {
+    if (pos >= _size) {
+      throw std::out_of_range("vec::at: position out of range");
+    }
     return _buffer[pos];
   }
 
-  auto front() -> T& {
+  auto operator[](size_type pos) -> reference {
+    return _buffer[pos];
+  }
+
+  auto operator[](size_type pos) const -> const_reference {
+    return _buffer[pos];
+  }
+
+  auto front() -> reference {
     return _buffer[0];
   }
 
-  auto front() const -> const T& {
+  auto front() const -> const_reference {
     return _buffer[0];
   }
 
-  auto back() -> T& {
+  auto back() -> reference {
     return _buffer[_size - 1];
   }
 
-  auto back() const -> const T& {
+  auto back() const -> const_reference {
     return _buffer[_size - 1];
   }
 
-  auto data() noexcept -> T* {
+  auto data() noexcept -> pointer {
     return _buffer.get();
   }
 
-  auto data() const noexcept -> const T* {
+  auto data() const noexcept -> const_pointer {
     return _buffer.get();
   }
 
-  auto begin() noexcept -> T* {
+  auto begin() noexcept -> iterator {
     return _buffer.get();
   }
 
-  auto begin() const noexcept -> const T* {
+  auto begin() const noexcept -> const_iterator {
     return _buffer.get();
   }
 
-  auto end() noexcept -> T* {
+  auto end() noexcept -> iterator {
     return _buffer.get() + _size;
   }
 
-  auto end() const noexcept -> const T* {
+  auto end() const noexcept -> const_iterator {
     return _buffer.get() + _size;
+  }
+
+  auto rbegin() noexcept -> reverse_iterator {
+    return reverse_iterator(end());
+  }
+
+  auto rbegin() const noexcept -> const_reverse_iterator {
+    return const_reverse_iterator(end());
+  }
+
+  auto rend() noexcept -> reverse_iterator {
+    return reverse_iterator(begin());
+  }
+
+  auto rend() const noexcept -> const_reverse_iterator {
+    return const_reverse_iterator(begin());
   }
 
   auto empty() const noexcept -> bool {
     return _size == 0;
   }
 
-  auto size() const noexcept -> std::size_t {
+  auto size() const noexcept -> size_type {
     return _size;
   }
 
-  auto capacity() const noexcept -> std::size_t {
+  auto capacity() const noexcept -> size_type {
     return _capacity;
   }
 
-  auto reserve(std::size_t new_cap) -> void {
+  auto reserve(size_type new_cap) -> void {
     if (new_cap > _capacity) {
       auto new_buffer = stl::make_box<T[]>(new_cap);
-      std::move(begin(), end(), new_buffer.get());
+      if constexpr (std::is_nothrow_move_constructible_v<T>) {
+        std::uninitialized_move_n(_buffer.get(), _size, new_buffer.get());
+      } else {
+        std::uninitialized_copy_n(_buffer.get(), _size, new_buffer.get());
+      }
+      std::destroy_n(_buffer.get(), _size);
       _buffer = std::move(new_buffer);
       _capacity = new_cap;
     }
@@ -147,54 +192,78 @@ class vec {
   auto shrink_to_fit() -> void {
     if (_size < _capacity) {
       auto new_buffer = stl::make_box<T[]>(_size);
-      std::move(begin(), end(), new_buffer.get());
+      if constexpr (std::is_nothrow_move_constructible_v<T>) {
+        std::uninitialized_move_n(_buffer.get(), _size, new_buffer.get());
+      } else {
+        std::uninitialized_copy_n(_buffer.get(), _size, new_buffer.get());
+      }
+      std::destroy_n(_buffer.get(), _size);
       _buffer = std::move(new_buffer);
       _capacity = _size;
     }
   }
 
   auto clear() noexcept -> void {
+    std::destroy_n(_buffer.get(), _size);
     _size = 0;
   }
 
   auto push_back(const T& value) -> void
     requires std::copyable<T>
   {
-    if (_size == _capacity)
+    if (_size == _capacity) {
       reserve(_capacity == 0 ? 1 : 2 * _capacity);
-    _buffer[_size++] = value;
+    }
+    new (_buffer.get() + _size) T(value);
+    ++_size;
   }
 
   auto push_back(T&& value) -> void
     requires std::movable<T>
   {
-    if (_size == _capacity)
-      reserve(_capacity == 0 ? 1 : 2 * _capacity);
-    _buffer[_size++] = std::move(value);
-  }
-
-  template <typename... Args>
-    requires std::is_constructible_v<T, Args...>
-  auto emplace_back(Args&&... args) -> T& {
     if (_size == _capacity) {
       reserve(_capacity == 0 ? 1 : 2 * _capacity);
     }
-    new (data() + _size) T(std::forward<Args>(args)...);
-    return (*this)[_size++];
+    new (_buffer.get() + _size) T(std::move(value));
+    ++_size;
+  }
+
+  template <typename... Args>
+  auto emplace_back(Args&&... args) -> reference
+    requires std::constructible_from<T, Args...>
+  {
+    if (_size == _capacity) {
+      reserve(_capacity == 0 ? 1 : 2 * _capacity);
+    }
+    new (_buffer.get() + _size) T(std::forward<Args>(args)...);
+    ++_size;
+    return back();
   }
 
   auto pop_back() -> void {
-    if (_size > 0)
+    if (_size > 0) {
       --_size;
+      _buffer.get()[_size].~T();
+    }
   }
 
-  auto resize(std::size_t count, const T& value = T{}) -> void
-    requires std::copyable<T>
-  {
-    if (count > _capacity)
-      reserve(count);
+  auto resize(size_type count) -> void {
     if (count > _size) {
-      std::fill(begin() + _size, begin() + count, value);
+      reserve(count);
+      std::uninitialized_default_construct_n(_buffer.get() + _size,
+                                             count - _size);
+    } else if (count < _size) {
+      std::destroy_n(_buffer.get() + count, _size - count);
+    }
+    _size = count;
+  }
+
+  auto resize(size_type count, const T& value) -> void {
+    if (count > _size) {
+      reserve(count);
+      std::uninitialized_fill_n(_buffer.get() + _size, count - _size, value);
+    } else if (count < _size) {
+      std::destroy_n(_buffer.get() + count, _size - count);
     }
     _size = count;
   }
@@ -205,16 +274,15 @@ class vec {
     std::swap(_buffer, other._buffer);
   }
 
-  auto operator=(const vec& other) -> vec&
-    requires std::copyable<T>
-  {
+  auto operator=(const vec& other) -> vec& {
     if (this != &other) {
+      clear();
       if (other._size > _capacity) {
         _buffer = stl::make_box<T[]>(other._size);
         _capacity = other._size;
       }
-      std::copy(other._buffer.get(), other._buffer.get() + other._size,
-                _buffer.get());
+      std::uninitialized_copy_n(other._buffer.get(), other._size,
+                                _buffer.get());
       _size = other._size;
     }
     return *this;
@@ -222,44 +290,43 @@ class vec {
 
   auto operator=(vec&& other) noexcept -> vec& {
     if (this != &other) {
+      clear();
       _buffer.reset();
-
-      _buffer = std::exchange(other._buffer, nullptr);
+      _buffer = std::move(other._buffer);
       _size = std::exchange(other._size, 0);
       _capacity = std::exchange(other._capacity, 0);
     }
     return *this;
   }
 
-  auto operator=(std::initializer_list<T> init) -> vec&
-    requires std::copyable<T>
-  {
+  auto operator=(std::initializer_list<T> init) -> vec& {
+    clear();
     if (init.size() > _capacity) {
       _buffer = stl::make_box<T[]>(init.size());
       _capacity = init.size();
     }
+    std::uninitialized_copy(init.begin(), init.end(), _buffer.get());
     _size = init.size();
-    std::copy(init.begin(), init.end(), _buffer.get());
     return *this;
   }
 
-  auto operator==(const vec& other) const noexcept -> bool {
-    return _size == other._size && std::equal(begin(), end(), other.begin());
+  auto operator==(const vec& other) const -> bool {
+    if (_size != other._size) {
+      return false;
+    }
+    return std::equal(begin(), end(), other.begin());
   }
 
-  auto operator<=>(const vec& other) const noexcept -> std::strong_ordering
+  auto operator<=>(const vec& other) const -> std::strong_ordering
     requires std::three_way_comparable<T>
   {
-    auto cmp = std::lexicographical_compare_three_way(
-        begin(), end(), other.begin(), other.end());
-    if (cmp != 0)
-      return cmp;
-    return _size <=> other._size;
+    return std::lexicographical_compare_three_way(begin(), end(), other.begin(),
+                                                  other.end());
   }
 
  private:
-  std::size_t _size;
-  std::size_t _capacity;
+  size_type _size;
+  size_type _capacity;
   stl::box<T[]> _buffer;
 };
 
