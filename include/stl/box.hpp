@@ -132,18 +132,18 @@ class box<T[], Deleter> {
   pointer _object;
 };
 
-template <typename T, typename... Args>
-auto make_box(Args&&... args) -> box<T>
-  requires(!std::is_array_v<T>)
-{
-  return box<T>(std::in_place, std::forward<Args>(args)...);
-}
-
 template <typename T>
 auto make_box(std::size_t size) -> box<T>
-  requires std::is_array_v<T>
+  requires std::is_unbounded_array_v<T>
 {
   return box<T>(size);
+}
+
+template <typename T, typename... Args>
+auto make_box(Args&&... args) -> box<T>
+  requires(!std::is_unbounded_array_v<T>)
+{
+  return box<T>(std::in_place, std::forward<Args>(args)...);
 }
 
 }  // namespace stl
