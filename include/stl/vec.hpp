@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <concepts>
 #include <cstddef>
+#include <format>
 #include <initializer_list>
 #include <iterator>
 #include <memory>
@@ -36,6 +37,7 @@ class vec {
   }
 
   vec(size_type count, const T& value)
+    requires std::copyable<T>
       : _size(count), _capacity(count), _buffer(stl::make_box<T[]>(count)) {
     std::uninitialized_fill_n(_buffer.get(), count, value);
   }
@@ -53,6 +55,7 @@ class vec {
         _buffer(std::move(other._buffer)) {}
 
   vec(std::initializer_list<T> init)
+    requires std::copyable<T>
       : _size(init.size()),
         _capacity(init.size()),
         _buffer(stl::make_box<T[]>(init.size())) {
@@ -61,6 +64,42 @@ class vec {
 
   ~vec() {
     clear();
+  }
+
+  auto operator=(const vec& other) -> vec& {
+    if (this != &other) {
+      clear();
+      if (other._size > _capacity) {
+        _buffer = stl::make_box<T[]>(other._size);
+        _capacity = other._size;
+      }
+      std::uninitialized_copy_n(other._buffer.get(), other._size,
+                                _buffer.get());
+      _size = other._size;
+    }
+    return *this;
+  }
+
+  auto operator=(vec&& other) noexcept -> vec& {
+    if (this != &other) {
+      clear();
+      _buffer.reset();
+      _buffer = std::move(other._buffer);
+      _size = std::exchange(other._size, 0);
+      _capacity = std::exchange(other._capacity, 0);
+    }
+    return *this;
+  }
+
+  auto operator=(std::initializer_list<T> init) -> vec& {
+    clear();
+    if (init.size() > _capacity) {
+      _buffer = stl::make_box<T[]>(init.size());
+      _capacity = init.size();
+    }
+    std::uninitialized_copy(init.begin(), init.end(), _buffer.get());
+    _size = init.size();
+    return *this;
   }
 
   auto assign(size_type count, const T& value) -> void {
@@ -87,14 +126,16 @@ class vec {
 
   auto at(size_type pos) -> reference {
     if (pos >= _size) {
-      throw std::out_of_range("vec::at: position out of range");
+      throw std::out_of_range(
+          std::format("vec::at: position {} out of range {}", pos, _capacity));
     }
     return _buffer[pos];
   }
 
   auto at(size_type pos) const -> const_reference {
     if (pos >= _size) {
-      throw std::out_of_range("vec::at: position out of range");
+      throw std::out_of_range(
+          std::format("vec::at: position {} out of range {}", pos, _capacity));
     }
     return _buffer[pos];
   }
@@ -272,42 +313,6 @@ class vec {
     std::swap(_size, other._size);
     std::swap(_capacity, other._capacity);
     std::swap(_buffer, other._buffer);
-  }
-
-  auto operator=(const vec& other) -> vec& {
-    if (this != &other) {
-      clear();
-      if (other._size > _capacity) {
-        _buffer = stl::make_box<T[]>(other._size);
-        _capacity = other._size;
-      }
-      std::uninitialized_copy_n(other._buffer.get(), other._size,
-                                _buffer.get());
-      _size = other._size;
-    }
-    return *this;
-  }
-
-  auto operator=(vec&& other) noexcept -> vec& {
-    if (this != &other) {
-      clear();
-      _buffer.reset();
-      _buffer = std::move(other._buffer);
-      _size = std::exchange(other._size, 0);
-      _capacity = std::exchange(other._capacity, 0);
-    }
-    return *this;
-  }
-
-  auto operator=(std::initializer_list<T> init) -> vec& {
-    clear();
-    if (init.size() > _capacity) {
-      _buffer = stl::make_box<T[]>(init.size());
-      _capacity = init.size();
-    }
-    std::uninitialized_copy(init.begin(), init.end(), _buffer.get());
-    _size = init.size();
-    return *this;
   }
 
   auto operator==(const vec& other) const -> bool {
