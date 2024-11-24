@@ -3,7 +3,6 @@
 #include <algorithm>
 #include <cstddef>
 #include <format>
-#include <initializer_list>
 #include <iterator>
 #include <memory>
 #include <stdexcept>
