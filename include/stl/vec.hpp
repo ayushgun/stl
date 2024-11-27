@@ -62,6 +62,18 @@ class vec {
     std::uninitialized_copy(init.begin(), init.end(), _buffer.get());
   }
 
+  template <typename Iterator>
+  vec(Iterator first, Iterator last)
+    requires std::input_iterator<Iterator> &&
+                 std::constructible_from<
+                     T,
+                     typename std::iterator_traits<Iterator>::value_type>
+      : _size(std::distance(first, last)),
+        _capacity(_size),
+        _buffer(stl::make_box<T[]>(_size)) {
+    std::uninitialized_copy(first, last, _buffer.get());
+  }
+
   ~vec() {
     clear();
   }

@@ -24,10 +24,26 @@ class arr {
   using reverse_iterator = std::reverse_iterator<iterator>;
   using const_reverse_iterator = std::reverse_iterator<const_iterator>;
 
+  constexpr arr() = default;
+
   template <typename... Args>
   constexpr arr(Args&&... args)
     requires(sizeof...(args) == N)
       : _buffer{std::forward<Args>(args)...} {}
+
+  template <typename InputIt>
+  constexpr arr(InputIt first, InputIt last)
+    requires std::input_iterator<InputIt> &&
+             std::convertible_to<
+                 typename std::iterator_traits<InputIt>::value_type,
+                 T>
+  {
+    if (std::distance(first, last) != N) {
+      throw std::out_of_range(
+          "arr::arr: Iterator range size does not match arr size");
+    }
+    std::uninitialized_copy(first, last, _buffer);
+  }
 
   auto at(size_type pos) -> reference {
     if (pos >= N) {
