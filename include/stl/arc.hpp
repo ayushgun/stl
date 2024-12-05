@@ -107,7 +107,6 @@ class arc {
 
     auto release_ref() noexcept -> void {
       if (_ref_count.fetch_sub(1, std::memory_order_acq_rel) == 1) {
-        _object.~T();
         release_weak_ref();
       }
     }
